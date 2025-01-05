@@ -1,0 +1,70 @@
+# -*- coding: utf-8; mode: tcl; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- vim:fenc=utf-8:ft=tcl:et:sw=4:ts=4:sts=4
+
+PortSystem          1.0
+PortGroup           legacysupport 1.1
+
+# botan needs clock_gettime & getentropy which are missing until osx 10.11 (=darwin 15)
+legacysupport.newest_darwin_requires_legacy 15
+
+name                botan3
+version             3.6.1
+revision            0
+set branch          [join [lrange [split ${version} .] 0 1] .]
+categories          security devel
+maintainers         {@edilmedeiros gmail.com:jose.edil+botan} \
+                    openmaintainer
+license             BSD
+description         cryptographic algorithms and formats library in C++
+long_description    Botan is a C++ library implementing a variety of \
+                    cryptographic algorithms and formats.
+
+homepage            https://botan.randombit.net
+master_sites        ${homepage}/releases/
+distname            Botan-${version}
+use_xz              yes
+
+checksums           rmd160  f59362a7da252f7b69f3e72ed49336ba3867b29d \
+                    sha256  7cb8575d88d232c77174769d7f9e24bb44444160585986eebd66e749cb9a9089 \
+                    size    7581864
+
+depends_build       port:python312
+depends_lib         port:bzip2 \
+                    port:lzma \
+                    port:sqlite3 \
+                    port:zlib
+
+conflicts           botan
+
+compiler.cxx_standard   2011
+# botan uses thread_local, which is not supported in Xcode < 8
+compiler.thread_local_storage   yes
+
+if {[tbool configure.ccache]} {
+    configure.args-append   --cc-bin="${prefix}/bin/ccache ${configure.cxx}"
+} else {
+    configure.args-append   --cc-bin=${configure.cxx}
+}
+
+set python_branch     3.12
+configure.cmd         ${prefix}/bin/python${python_branch} ./configure.py
+configure.args-append --docdir=share/doc \
+                      --system-cert-bundle=${prefix}/share/curl/curl-ca-bundle.crt \
+                      --extra-cxxflags="-isystem ${prefix}/include" \
+                      --with-bzip2 \
+                      --with-lzma \
+                      --with-sqlite3 \
+                      --with-zlib
+
+# no matching constructor for initialization of 'std::vector<CFStringRef>'
+if {${os.major} <= 14} {
+    configure.args-append --disable-modules=certstor_system_macos
+}
+
+platform darwin { configure.args-append --os=darwin }
+
+livecheck.regex     Botan-(${branch}\\.\[0-9.\]+)${extract.suffix}
+
+post-destroot {
+    xinstall -d ${destroot}${frameworks_dir}/Python.framework/Versions/${python_branch}/lib
+    move ${destroot}${prefix}/lib/python${python_branch} ${destroot}${frameworks_dir}/Python.framework/Versions/${python_branch}/lib/python${python_branch}
+}
